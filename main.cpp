@@ -286,8 +286,14 @@ struct OperandsRenderer : DummyRenderer {
         auto wrapper = div();
 
         for (auto op : const_cast<Instruction&>(inst).operand_values()) {
-          wrapper->add(analyses.names().ref(op));
-          wrapper->add(br());
+          wrapper->add(
+            span(
+              /// add type of operand as hover text
+              attr("title", html::print(*op->getType(), false)),
+              analyses.names().ref(op)
+            ),
+            br()
+          );
         }
 
         return wrapper;

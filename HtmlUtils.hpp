@@ -484,6 +484,7 @@ DEFINE_TAG_CTORS(thead)
 DEFINE_TAG_CTORS(tr)
 DEFINE_TAG_CTORS(th)
 DEFINE_TAG_CTORS(td)
+DEFINE_TAG_CTORS(span)
 
 inline EmptyTag* br() {
   return new EmptyTag{"br"};
