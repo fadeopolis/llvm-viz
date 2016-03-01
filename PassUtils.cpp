@@ -3,6 +3,7 @@
 //
 
 #include "PassUtils.hpp"
+#include "PrintUtils.hpp"
 #include "HtmlUtils.hpp"
 #include <llvm/PassRegistry.h>
 #include <llvm/IR/BasicBlock.h>
@@ -73,9 +74,19 @@ Html* InstructionNamer::ref(const Value* v) {
 }
 
 Html* InstructionNamer::makeLink(const Value *v) {
-  return tag("a", attr("href", '#' + getId(v)), html::str(asOperand(v)));
+  return tag(
+    "a",
+    attr("href",  '#' + getId(v)),
+    /// add type of value as mouseover text
+    attr("title", html::print(*v->getType(), false)),
+    html::str(asOperand(v))
+  );
 }
 
 Html* InstructionNamer::makeString(const Value *v) {
-  return html::str(getId(v));
+  return html::span(
+    /// add type of value as mouseover text
+    attr("title", html::print(*v->getType(), false)),
+    getId(v)
+  );
 }

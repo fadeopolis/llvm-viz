@@ -287,11 +287,7 @@ struct OperandsRenderer : DummyRenderer {
 
         for (auto op : const_cast<Instruction&>(inst).operand_values()) {
           wrapper->add(
-            span(
-              /// add type of operand as hover text
-              attr("title", html::print(*op->getType(), false)),
-              analyses.names().ref(op)
-            ),
+            analyses.names().ref(op),
             br()
           );
         }
