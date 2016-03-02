@@ -682,7 +682,7 @@ struct HtmlPrinter {
             background-color: rgb(220,220,220);
             border-radius: 0 0 0 1em;
             padding: 2em;
-            min-width: 10%;
+            width: auto;
         }
 
         #control-bar th {
