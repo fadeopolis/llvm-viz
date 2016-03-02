@@ -15,6 +15,9 @@ static void nl(unsigned indent_lvl, raw_ostream& OS);
 static unsigned inc_indent(unsigned indent_lvl);
 
 void html::HtmlEscapedString::_print(raw_ostream &OS, unsigned indent_lvl) const {
+  if (_txt.empty())
+    return;
+
   indent(indent_lvl, OS);
 
   print_str(OS, _txt);

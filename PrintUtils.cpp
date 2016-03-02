@@ -54,6 +54,9 @@ void LongStringLiteral::print(raw_ostream &OS, unsigned int indent) {
   for (size_t i = first_line, end = last_line; i <= end; i++) {
     auto line = lines[i];
 
-    OS.indent(indent) << line.substr(num_common_spaces) << '\n';
+    if (!line.empty())
+      OS.indent(indent) << line.substr(num_common_spaces);
+
+    OS << '\n';
   }
 }
