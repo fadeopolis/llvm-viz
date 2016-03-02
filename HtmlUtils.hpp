@@ -244,6 +244,7 @@ private:
 struct HtmlEntity : HtmlString {
   enum Entity {
     TIMES,
+    MINUS,
   };
 
   HtmlEntity(Entity entity) : HtmlString{K_HtmlEntity}, _entity{entity} {}
@@ -406,9 +407,7 @@ private:
 struct VerbatimTag : HtmlTag {
   VerbatimTag(const Twine& tag) : HtmlTag{K_VerbatimTag, tag, {}} {}
 
-  VerbatimTag(const Twine& tag, std::string&& source) : HtmlTag{K_VerbatimTag, tag, {}}, _body{std::move(source)} {}
-
-  VerbatimTag(const Twine& tag, const std::string& source) : HtmlTag{K_VerbatimTag, tag, {}}, _body{source} {}
+  VerbatimTag(const Twine& tag, const Twine& source) : HtmlTag{K_VerbatimTag, tag, {}}, _body{source.str()} {}
 
   static bool classof(const Html *html) {
     return html->kind() == K_VerbatimTag;
@@ -455,10 +454,6 @@ using HtmlBody  = std::initializer_list<Html*>;
   inline SimpleTag* NAME() { \
     return new SimpleTag{#NAME, {}, {}}; \
   } \
-  template<typename... Body> \
-  inline SimpleTag* NAME(Html* html, const HtmlAttrs& attrs, Body... body) { \
-    return new SimpleTag{#NAME, attrs, {html, body...}}; \
-  } \
   template<typename... Args> \
   inline SimpleTag* NAME(Args... args) { \
     auto tag = new SimpleTag{#NAME, {}, {}}; \
@@ -478,13 +473,14 @@ template<typename... Args> \
 }
 
 DEFINE_TAG_CTORS(div)
+DEFINE_TAG_CTORS(a)
+DEFINE_TAG_CTORS(span)
 DEFINE_TAG_CTORS(table)
 DEFINE_TAG_CTORS(tbody)
 DEFINE_TAG_CTORS(thead)
 DEFINE_TAG_CTORS(tr)
 DEFINE_TAG_CTORS(th)
 DEFINE_TAG_CTORS(td)
-DEFINE_TAG_CTORS(span)
 
 inline EmptyTag* br() {
   return new EmptyTag{"br"};
@@ -505,28 +501,39 @@ inline EmptyTag* meta(Attrs&&... attrs) {
   return tag;
 }
 
-inline VerbatimTag* script() {
-  return new VerbatimTag{"script"};
+template<typename... Attrs>
+inline EmptyTag* img(Attrs&&... attrs) {
+  auto tag = new EmptyTag{"img"};
+  tag->addAttrs(std::forward<Attrs>(attrs)...);
+  return tag;
 }
 
-inline VerbatimTag* script(std::string&& source) {
+inline VerbatimTag* script(const Twine& source) {
   return new VerbatimTag{"script", source};
 }
 
-inline VerbatimTag* script(const std::string& source) {
-  return new VerbatimTag{"script", source};
-}
-
-inline VerbatimTag* style(const std::string& source) {
+inline VerbatimTag* style(const Twine& source) {
   return new VerbatimTag{"style", source};
 }
 
-inline HtmlAttr attr(const std::string& name, const std::string& value) {
-  return HtmlAttr{name, value};
+inline HtmlAttr attr(const Twine& name, const Twine& value) {
+  return HtmlAttr{name.str(), value.str()};
 }
 
-inline HtmlAttr attr(const std::string& name, unsigned value) {
-  return HtmlAttr{name, std::to_string(value)};
+inline HtmlAttr attr(const Twine& name, unsigned value) {
+  return HtmlAttr{name.str(), std::to_string(value)};
+}
+
+inline HtmlAttr data_attr(const Twine& name, const Twine& value) {
+  return HtmlAttr{("data-" + name).str(), value.str()};
+}
+
+inline HtmlAttr css_id(const Twine& t) {
+  return HtmlAttr{"id", t.str()};
+}
+
+inline HtmlAttr css_class(const Twine& t) {
+  return HtmlAttr{"class", t.str()};
 }
 
 
@@ -534,6 +541,10 @@ inline HtmlAttr attr(const std::string& name, unsigned value) {
 
 inline HtmlEntity* times() {
   return new HtmlEntity(HtmlEntity::TIMES);
+}
+
+inline HtmlEntity* minus() {
+  return new HtmlEntity(HtmlEntity::MINUS);
 }
 
 

@@ -21,29 +21,62 @@ std::string InstructionNamer::getId(const Value *v) {
     return it->second;
   }
 
-  std::string str;
-  raw_string_ostream OS{str};
-
-  if (isa<Constant>(v)) {
-    v->printAsOperand(OS, false, _slots);
-  } else if (auto bb = dyn_cast<BasicBlock>(v)) {
-    OS << bb->getParent()->getName();
-    OS << '.';
-    v->printAsOperand(OS, false, _slots);
-  } else if (auto inst = dyn_cast<Instruction>(v)) {
-    OS << inst->getFunction()->getName();
-    OS << '.';
-    v->printAsOperand(OS, false, _slots);
-  } else if (auto arg = dyn_cast<Argument>(v)) {
-    OS << arg->getParent()->getName();
-    OS << '.';
-    v->printAsOperand(OS, false, _slots);
-  } else {
-    llvm_unreachable("Invalid Value kind");
+  /// print ID to temporary string
+  SmallString<32> tmp;
+  {
+    raw_svector_ostream OS{tmp};
+    if (isa<Constant>(v)) {
+      v->printAsOperand(OS, false, _slots);
+    } else if (auto bb = dyn_cast<BasicBlock>(v)) {
+      OS << bb->getParent()->getName();
+      OS << '.';
+      v->printAsOperand(OS, false, _slots);
+    } else if (auto inst = dyn_cast<Instruction>(v)) {
+      OS << inst->getFunction()->getName();
+      OS << '.';
+      v->printAsOperand(OS, false, _slots);
+    } else if (auto arg = dyn_cast<Argument>(v)) {
+      OS << arg->getParent()->getName();
+      OS << '.';
+      v->printAsOperand(OS, false, _slots);
+    } else {
+      llvm_unreachable("Invalid Value kind");
+    }
   }
 
-  OS.flush();
+  /// escape special CSS chars
+  std::string str;
+  {
+    raw_string_ostream OS{str};
 
+    for (char c : tmp) {
+      switch (c) {
+        case '_':
+          OS << "___";
+          break;
+        case '@':
+          OS << "_at_";
+          break;
+        case '%':
+          OS << "_percent_";
+          break;
+        case '.':
+          OS << "_dot_";
+          break;
+        case '#':
+          OS << "_hash_";
+          break;
+        // TODO: escape more chars
+        default:
+          OS << c;
+          break;
+      }
+    }
+
+    OS.flush();
+  }
+
+  /// Cache and return ID
   auto new_it = _ids.insert(std::make_pair(v, str));
 
   return new_it.first->second;

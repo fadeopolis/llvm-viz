@@ -111,6 +111,9 @@ struct Analyses {
 struct Renderer {
   virtual ~Renderer() {}
 
+  // *********************************************************************************
+  // ***** RENDER FUNCTION CODE
+
   /// Renders HTML for one instruction attribute.
   /// One renderer may spawn multiple AttributeRenderers
   struct AttributeRenderer {
@@ -136,82 +139,84 @@ struct Renderer {
     virtual void style(const BasicBlock& bb, SimpleTag* tbody) = 0;
   };
 
-  struct CssFlag {
-    CssFlag(const Twine& display, const Twine& css, bool init = true)
-    : displayName{display.str()}
-    , cssName{css.str()}
-    , initial_value{init}
-    {}
-
-    std::string displayName, cssName;
-    bool initial_value;
-  };
-
-  virtual void addCssFlags(VectorAppender<CssFlag> dst) = 0;
-
-  /// Called once everything has been rendered to allow for additional tweaks.
-  // i.e. adding some CSS classes or adding <script> tags, etc.
-  virtual void styleBody(SimpleTag* body) = 0;
-
   /// Create instruction attribute renderers
   /// This function is called once per each llvm::Function
   virtual void createRenderers(Analyses&, VectorAppender<std::unique_ptr<AttributeRenderer>> dst) = 0;
 
   /// This function is called once per each llvm::Function
   virtual void createBasicBlockStylers(Analyses&, VectorAppender<std::unique_ptr<BasicBlockStyler>> dst) = 0;
-private:
-  /// Helper class that just calls a lambda to render an attribute
-  struct LambdaRenderer final : AttributeRenderer {
-    LambdaRenderer(const std::function<Html*()>& header, const std::function<Html*(const Instruction&)>& attr)
-    : _renderHeader{header}, _renderAttr{attr} {}
 
-    Html* renderColumnHeader() override { return _renderHeader(); }
-    Html* render(const Instruction& inst) override { return _renderAttr(inst); }
-  private:
-    std::function<Html*()> _renderHeader;
-    std::function<Html*(const Instruction&)> _renderAttr;
-  };
-
-  /// Helper class that just calls a lambda to style a block
-  struct LambdaBasicBlockStyler final : BasicBlockStyler {
-    LambdaBasicBlockStyler(const std::function<void(const BasicBlock&, SimpleTag*)>& styler)
-    : _styler{styler} {}
-
-    void style(const BasicBlock& bb, SimpleTag* tag) override {
-      _styler(bb, tag);
-    }
-  private:
-    std::function<void(const BasicBlock&, SimpleTag*)> _styler;
-  };
 protected:
   /// Helper for creating a simple renderer from lambdas
   void createRenderer(
-      VectorAppender<std::unique_ptr<AttributeRenderer>> dst,
-      std::function<Html*()> renderHeader,
-      std::function<Html*(const Instruction&)> renderAttr
-  ) {
-    dst.emplace_back(new LambdaRenderer{renderHeader, renderAttr});
-  }
+    VectorAppender<std::unique_ptr<AttributeRenderer>> dst,
+    std::function<Html*()> renderHeader,
+    std::function<Html*(const Instruction&)> renderAttr
+  );
 
   /// Helper for creating a simple styler from lambdas
   void createStyler(
     VectorAppender<std::unique_ptr<BasicBlockStyler>> dst,
     std::function<void(const BasicBlock&, SimpleTag*)> styler
-  ) {
-    dst.emplace_back(new LambdaBasicBlockStyler{styler});
-  }
+  );
+public:
+
+  // *********************************************************************************
+  // ***** ADD CSS TO PAGE
+
+  /// Called when the <head> is being rendered.
+  /// Allows a renderer to inject a <style> tag with additional CSS.
+  virtual Optional<std::string> addCss() = 0;
+
+
+  // *********************************************************************************
+  // ***** ADD JS TO PAGE
+
+  /// Called once the <body> has been rendererd.
+  /// Allows a renderer to inject a <script> tag with additional at the end of the body.
+  virtual Optional<std::string> addJs() = 0;
+
+
+  // *********************************************************************************
+  // ***** RENDER TO CONTROL BAR
+
+  struct ControlCheckbox {
+    ControlCheckbox(const Twine& display_name, const Twine& css_id, bool initially_checked = true)
+    : display_name{display_name.str()}
+    , css_id{css_id.str()}
+    , initially_checked{initially_checked}
+    {}
+
+    std::string display_name, css_id;
+    bool initially_checked;
+  };
+
+  struct ControlButton {
+    ControlButton(const Twine& display_name, const Twine& css_id)
+    : display_name{display_name.str()}
+    , css_id{css_id.str()}
+    {}
+
+    std::string display_name, css_id;
+  };
+
+  /// Called when the control bar is being rendered to checkboxes for flags
+  virtual void addControlCheckboxes(VectorAppender<ControlCheckbox> dst) = 0;
+
+  /// Called when the control bar is being rendered to add buttons
+  virtual void addControlButtons(VectorAppender<ControlButton> dst) = 0;
 };
 
 /// Helper class for implementing renderers. This implementation just renders nothing
 struct DummyRenderer : Renderer {
-  void styleBody(SimpleTag* body) override {}
-
-  void addCssFlags(VectorAppender<CssFlag> dst) override {}
-
-  /// Create instruction attribute renderers
   void createRenderers(Analyses&, VectorAppender<std::unique_ptr<AttributeRenderer>> dst) override {}
-
   void createBasicBlockStylers(Analyses&, VectorAppender<std::unique_ptr<BasicBlockStyler>> dst) override {}
+
+  void addControlCheckboxes(VectorAppender<ControlCheckbox> dst) override {}
+  void addControlButtons(VectorAppender<ControlButton> dst) override {}
+
+  Optional<std::string> addCss() override { return None; }
+  Optional<std::string> addJs() override { return None; }
 };
 
 
@@ -478,7 +483,7 @@ struct LoopDepthStyler final : DummyRenderer {
 //    );
 //  }
 
-  void addCssFlags(VectorAppender<CssFlag> dst) {
+  void addControlCheckboxes(VectorAppender<ControlCheckbox> dst) {
     dst.emplace_back("Loop depth color", "loop-depth-color", true);
   }
 };
@@ -584,20 +589,87 @@ struct HtmlPrinter {
          * the collapse/expand `button' is implemented as a link,
          * disable underlining and selection to make it feel more like a button
          */
-        a.nounderline {
+        .function-collapse-btn, .function-expand-btn {
+           margin-left: 0.5em;
            text-decoration: none !important;
-           user-select: none;
+           -moz-user-select: none;
         }
 
-        .function-code {
-          transition: 0.5s; /* 0.5 second transition effect to slide in or slide down the overlay */
-        }
+        .function           .expander  { display: none; }
+        .function.collapsed .expander  { display: inline; }
+        .function.collapsed .collapser { display: none; }
 
+        #collapse-all-btn           .expander  { display: none; }
+        #collapse-all-btn.collapsed .expander  { display: inline; }
+        #collapse-all-btn.collapsed .collapser { display: none; }
 
         /******************************************/
         /* collapsable overlay for showing CFG */
 
+        /* The Overlay (background) */
+        #cfg-overlay {
+            /* Height & width depends on how you want to reveal the overlay (see JS below) */
+            height: 0;
+            width: 100%;
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Sit on top */
+            left: 0;
+            top: 0;
+            background-color: rgb(0,0,0); /* Black fallback color */
+            background-color: rgba(0,0,0, 0.9); /* Black w/opacity */
+            overflow-x: hidden; /* Disable horizontal scroll */
+            transition: 0.5s; /* 0.5 second transition effect to slide in or slide down the overlay (height or width, depending on reveal) */
+        }
 
+        /* Position the content inside the overlay */
+        #cfg-overlay-content {
+            position: relative;
+            top: 25%; /* 25% from the top */
+            width: 100%; /* 100% width */
+            text-align: center; /* Centered text/links */
+            margin-top: 30px; /* 30px top margin to avoid conflict with the close button on smaller screens */
+        }
+
+        /* The navigation links inside the overlay */
+        #cfg-overlay a {
+            padding: 8px;
+            text-decoration: none;
+            font-size: 36px;
+            color: #818181;
+            display: block; /* Display block instead of inline */
+            transition: 0.3s; /* Transition effects on hover (color) */
+        }
+
+        /* When you mouse over the navigation links, change their color */
+        #cfg-overlay a:hover, #cfg-overlay a:focus {
+            color: #f1f1f1;
+        }
+
+        /* Position the close button (top right corner) */
+        #cfg-overlay-closebtn {
+            position: absolute;
+            top:       20px;
+            right:     45px;
+            font-size: 60px !important; /* Override the font-size specified earlier (36px) for all navigation links */
+        }
+
+        /*
+         * When the height of the screen is less than 450 pixels, change the
+         * font-size of the links and position the close button again,
+         * so they don't overlap
+         */
+        @media screen and (max-height: 450px) {
+            #cfg-overlay a {font-size: 20px}
+            #cfg-overlay-closebtn {
+                font-size: 40px !important;
+                top: 15px;
+                right: 35px;
+            }
+        }
+
+        .cfg-image {
+            display: none;
+        }
 
         /******************************************/
         /* fixed position bar on top of page with checkboxes for enabling/disabling display flags */
@@ -609,8 +681,12 @@ struct HtmlPrinter {
             z-index: 999;
             background-color: rgb(220,220,220);
             border-radius: 0 0 0 1em;
-            padding: 1em;
-            width: auto;
+            padding: 2em;
+            min-width: 10%;
+        }
+
+        #control-bar th {
+          text-align: center;
         }
       )"));
       head->add(style(BootstrapCssSource()));
@@ -622,30 +698,119 @@ struct HtmlPrinter {
 
     auto body = tag("body");
 
+    /// Render control bar which contains buttons & checkboxes for various flags & display actions
     {
       auto control_bar = table(attr("id", "control-bar"), attr("class", "table"));
 
-      std::vector<Renderer::CssFlag> css_flags;
+      /// Render fold all functions button
+      {
+        auto fold_all = a(
+          attr("id", "collapse-all-btn"),
+          span(css_class("collapser"), "Collapse all functions"),
+          span(css_class("expander"), "Expand all functions")
+        );
 
-      for (auto& renderer : _renderers)
-        renderer->addCssFlags(css_flags);
-
-      for (auto& flag : css_flags) {
         control_bar->add(
           tr(
             th(
-              html::input(
-                "checkbox",
-                attr("checked", flag.initial_value ? "checked" : "unchecked"),
-                attr("onclick", "setBodyFlag(this.checked,'" + flag.cssName + "');")
-              )
-            ),
-            th(flag.displayName)
+              attr("colspan", 2),
+              css_class("control-bar-control"),
+              fold_all
+            )
           )
         );
       }
 
+      control_bar->add(tr());
+
+      /// Render checkboxes for various display flags
+      {
+        std::vector<Renderer::ControlCheckbox> checkboxes;
+        std::vector<Renderer::ControlButton>   buttons;
+
+        for (auto& renderer : _renderers) {
+          renderer->addControlCheckboxes(checkboxes);
+          renderer->addControlButtons(buttons);
+        }
+
+        for (auto& button : buttons) {
+          control_bar->add(
+            tr(
+              th(
+                attr("colspan", 2),
+                html::a(
+                  attr("id", button.css_id),
+                  button.display_name
+                )
+              )
+            )
+          );
+        }
+
+        control_bar->add(tr());
+
+        for (auto& flag : checkboxes) {
+          control_bar->add(
+            tr(
+              th(
+                html::input(
+                  "checkbox",
+                  attr("id", flag.css_id),
+                  attr("data-flag", flag.css_id),
+                  attr("checked", flag.initially_checked ? "checked" : "unchecked")
+                )
+              ),
+              th(flag.display_name)
+            )
+          );
+        }
+      }
+
       body->add(control_bar);
+    }
+
+    /// add overlay for displaying function CFG
+    {
+      /**
+       * Important elements classes:
+       *  - #cfg-overlay .......... container for the whole overlay the CFG image is shown here
+       *  - .cfg-overlay-closer ... any link with this class closes the overlay when clicked.
+       */
+
+      auto overlay = div(
+        attr("id", "cfg-overlay"),
+
+        /// close button for the overlay
+        // <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+        html::a(
+          attr("href", "javascript:void(0)"),
+          attr("id", "cfg-overlay-closebtn"),
+          attr("class", "cfg-overlay-closer"),
+          html::times()
+        ),
+
+        /// overlay content
+        html::div(
+          css_id("cfg-overlay-content"),
+          new VerbatimTag("div", R"XO(
+            <svg >
+              <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   style="stop-color:rgb(255,255,0);stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:rgb(255,0,0);stop-opacity:1" />
+                </linearGradient>
+              </defs>
+              <ellipse cx="100" cy="70" rx="85" ry="55" fill="url(#grad1)" />
+                 <text fill="#ffffff" font-size="45" font-family="Verdana" x="50" y="86">
+                   <a xlink:href="#_at_main2" class="cfg-overlay-closer">main2</a>
+                 </text>
+                 Sorry, your browser does not support inline SVG.
+            </svg>
+          )XO")
+        )
+      );
+
+      body->add(overlay);
     }
 
     for (auto& fn : analyses.module()) {
@@ -662,47 +827,75 @@ struct HtmlPrinter {
 
     /// JS for enabling/disabling the loop-depth-color-flag
     body->add(script(R"(
-        function setBodyFlag(enable, css_class) {
-          if (enable) {
+        $('#control-bar input:checkbox').change(function(){
+          var css_class = $(this).data('flag');
+
+          if ($(this).is(':checked')) {
             $('body').addClass(css_class);
           } else {
             $('body').removeClass(css_class);
           }
-        }
+        });
 
-        setBodyFlag(true, 'loop-depth-color');
+        $('body').addClass('loop-depth-color');
     )"));
 
     /// JS for collapsing/expanding code for a function
     body->add(script(R"(
-        function collapseCode(button, fn_code) {
-          if (fn_code.is(':visible')) {
-            button.html('&minus;');
-          } else {
-            button.html('&times;');
-          }
+      $('.function-collapse-btn').click(function(){
+        var button          = $(this);
+        var target_selector = button.data('target');
+        var target          = $(target_selector);
 
-          fn_code.toggle();
+        target.toggleClass('collapsed');
+
+        // TODO: find a way to do the folding/unfolding in CSS
+        if (target.hasClass('collapsed')) {
+          target.find('.function-code').slideUp();
+        } else {
+          target.find('.function-code').slideDown();
         }
+      });
+
+      // collapse all button
+      $('#control-bar #collapse-all-btn').click(function(){
+        $(this).toggleClass('collapsed');
+
+        if ($(this).hasClass('collapsed')) {
+          $('.function').addClass('collapsed');
+          $('.function-code').slideUp();
+        } else {
+          $('.function').removeClass('collapsed');
+          $('.function-code').slideDown();
+        }
+      });
     )"));
 
-    body->add(script(R"XO(
-</script>
-<svg height="130" width="500">
-  <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%"
-      style="stop-color:rgb(255,255,0);stop-opacity:1" />
-      <stop offset="100%"
-      style="stop-color:rgb(255,0,0);stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <ellipse cx="100" cy="70" rx="85" ry="55" fill="url(#grad1)" />
-                     <text fill="#ffffff" font-size="45" font-family="Verdana"
-    x="50" y="86">SVG</text>
-             Sorry, your browser does not support inline SVG.
-    </svg>
-<script>
+    /// JS for showing overlay with image of function CFG
+    body->add(script(R"(
+      $('.function-name').click(function(){
+        $('#cfg-overlay').css('height', "100%");
+      });
+
+      $('.cfg-overlay-closer').click(function(){
+        $('#cfg-overlay').css('height', "0%");
+      });
+    )"));
+
+    body->add(new VerbatimTag("div", R"XO(
+      <svg height="130" width="500">
+        <defs>
+          <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   style="stop-color:rgb(255,255,0);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:rgb(255,0,0);stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="100" cy="70" rx="85" ry="55" fill="url(#grad1)" />
+           <text fill="#ffffff" font-size="45" font-family="Verdana" x="50" y="86">
+             <a xlink:href="#_at_main2" class="cfg-overlay-closer">Nyaah!</a>
+           </text>
+           Sorry, your browser does not support inline SVG.
+      </svg>
     )XO"));
 
     doc->add(body);
@@ -723,30 +916,44 @@ private:
     for (auto& renderer : _renderers)
       renderer->createBasicBlockStylers(analyses, _basic_block_stylers);
 
-    auto main = div(attr("id", getId(fn)));
+    auto main = html::div(
+      css_class("function expanded"),
+      css_id(getId(fn))
+    );
 
     /// render header with function name & fold/unfold button
     {
       auto header = tag("h1");
 
+      /// buttons to fold/expand code for function
       header->add(
-        tag("a",
-          attr("class", "nounderline"),
-          attr("onclick", "collapseCode($(this), $('#" + fn.getName().str() + "-code'));"),
-          times()
+        html::a(
+          css_class("function-collapse-btn"),
+          data_attr("target", '#' + getId(fn)),
+          // displayed when fn is expanded
+          span(css_class("collapser"), times()),
+          // displayed when fn is collapsed
+          span(css_class("expander"), minus())
         )
       );
 
-      header->add(fn.getName());
+      /// name of function and at the same time button to show CFG of function.
+      header->add(
+        span(
+          css_class("function-name"),
+          data_attr("target", '#' + getId(fn) + "-cfg"),
+          fn.getName()
+        )
+      );
 
       main->add(header);
     }
 
-    auto fn_html = div(attr("class", "function-code"), attr("id", fn.getName().str() + "-code"));
+    auto fn_html = html::div(css_class("function-code"), css_id(getId(fn) + "-code"));
 
     /// render table for function arguments`
     {
-      auto table = html::table(attr("class", "table arg-table"));
+      auto table = html::table(css_class("table arg-table"));
 
       bool first = true;
       for (auto& arg : fn.getArgumentList()) {
@@ -978,4 +1185,46 @@ int main(int argc, const char * const* argv) {
   }
 
   return 0;
+}
+
+/// **************************************
+/// ***** Renderer
+
+/// Helper class that just calls a lambda to render an attribute
+struct LambdaRenderer final : Renderer::AttributeRenderer {
+  LambdaRenderer(const std::function<Html*()>& header, const std::function<Html*(const Instruction&)>& attr)
+    : _renderHeader{header}, _renderAttr{attr} {}
+
+  Html* renderColumnHeader() override { return _renderHeader(); }
+  Html* render(const Instruction& inst) override { return _renderAttr(inst); }
+private:
+  std::function<Html*()> _renderHeader;
+  std::function<Html*(const Instruction&)> _renderAttr;
+};
+
+/// Helper class that just calls a lambda to style a block
+struct LambdaBasicBlockStyler final : Renderer::BasicBlockStyler {
+  LambdaBasicBlockStyler(const std::function<void(const BasicBlock&, SimpleTag*)>& styler)
+    : _styler{styler} {}
+
+  void style(const BasicBlock& bb, SimpleTag* tag) override {
+    _styler(bb, tag);
+  }
+private:
+  std::function<void(const BasicBlock&, SimpleTag*)> _styler;
+};
+
+void Renderer::createRenderer(
+  VectorAppender<std::unique_ptr<AttributeRenderer>> dst,
+  std::function<Html*()> renderHeader,
+  std::function<Html*(const Instruction&)> renderAttr
+) {
+  dst.emplace_back(new LambdaRenderer{renderHeader, renderAttr});
+}
+
+void Renderer::createStyler(
+  VectorAppender<std::unique_ptr<BasicBlockStyler>> dst,
+  std::function<void(const BasicBlock&, SimpleTag*)> styler
+) {
+  dst.emplace_back(new LambdaBasicBlockStyler{styler});
 }

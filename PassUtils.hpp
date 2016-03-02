@@ -18,6 +18,7 @@ using namespace llvm;
 struct InstructionNamer {
   InstructionNamer(ModuleSlotTracker& slots) : _slots{slots} {}
 
+  /// Returns a unique ID for a given value that can be used in CSS.
   std::string getId(const Value* v);
   std::string getId(const Value& v) { return getId(&v); }
 

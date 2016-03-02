@@ -32,6 +32,7 @@ void html::HtmlEntity::_print(raw_ostream &OS, unsigned indent_lvl) const {
 StringRef html::HtmlEntity::str() const {
   switch (_entity) {
     case TIMES: return "&times;";
+    case MINUS: return "&minus;";
     default: llvm_unreachable("Garbage HTML entity");
   }
 }
