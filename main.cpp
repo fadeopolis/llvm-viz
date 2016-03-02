@@ -698,6 +698,9 @@ struct HtmlPrinter {
 
     auto body = tag("body");
 
+    std::vector<Renderer::ControlCheckbox> controlbar_checkboxes;
+    std::vector<Renderer::ControlButton>   controlbar_buttons;
+
     /// Render control bar which contains buttons & checkboxes for various flags & display actions
     {
       auto control_bar = table(attr("id", "control-bar"), attr("class", "table"));
@@ -725,15 +728,12 @@ struct HtmlPrinter {
 
       /// Render checkboxes for various display flags
       {
-        std::vector<Renderer::ControlCheckbox> checkboxes;
-        std::vector<Renderer::ControlButton>   buttons;
-
         for (auto& renderer : _renderers) {
-          renderer->addControlCheckboxes(checkboxes);
-          renderer->addControlButtons(buttons);
+          renderer->addControlCheckboxes(controlbar_checkboxes);
+          renderer->addControlButtons(controlbar_buttons);
         }
 
-        for (auto& button : buttons) {
+        for (auto& button : controlbar_buttons) {
           control_bar->add(
             tr(
               th(
@@ -749,17 +749,21 @@ struct HtmlPrinter {
 
         control_bar->add(tr());
 
-        for (auto& flag : checkboxes) {
+        for (auto& flag : controlbar_checkboxes) {
+          auto checkbox = html::input(
+            "checkbox",
+            attr("id", flag.css_id),
+            attr("data-flag", flag.css_id)
+          );
+
+          if (flag.initially_checked) {
+            body->addClass(flag.css_id);
+            checkbox->addAttr("checked");
+          }
+
           control_bar->add(
             tr(
-              th(
-                html::input(
-                  "checkbox",
-                  attr("id", flag.css_id),
-                  attr("data-flag", flag.css_id),
-                  attr("checked", flag.initially_checked ? "checked" : "unchecked")
-                )
-              ),
+              th(checkbox),
               th(flag.display_name)
             )
           );
@@ -825,7 +829,7 @@ struct HtmlPrinter {
     body->add(script(jQuerySource()));
     body->add(script(BootstrapJsSource()));
 
-    /// JS for enabling/disabling the loop-depth-color-flag
+    /// JS for enabling/disabling the display flags from checkboxes in the control-bar
     body->add(script(R"(
         $('#control-bar input:checkbox').change(function(){
           var css_class = $(this).data('flag');
@@ -836,8 +840,6 @@ struct HtmlPrinter {
             $('body').removeClass(css_class);
           }
         });
-
-        $('body').addClass('loop-depth-color');
     )"));
 
     /// JS for collapsing/expanding code for a function

@@ -261,16 +261,20 @@ private:
 };
 
 struct HtmlAttr {
+  /// Create a value-less attribute (like `checked' in checkbox inputs)
+  explicit HtmlAttr(const Twine& name) : _name{name.str()} {}
+
   HtmlAttr(const std::string& name, const std::string& value) : _name{name}, _value{value} {}
 
   StringRef name() const { return _name; }
 
-  std::string& value() { return _value; }
-  const std::string& value() const { return _value; }
+  Optional<std::string>& value() { return _value; }
+  const Optional<std::string>& value() const { return _value; }
 
   void print(raw_ostream& OS, unsigned indent = 0) const;
 private:
-  std::string _name, _value;
+  std::string _name;
+  Optional<std::string> _value;
 };
 
 struct HtmlTag : Html {
@@ -279,15 +283,23 @@ struct HtmlTag : Html {
   StringRef tag() const { return _tag.str(); }
 
   Optional<StringRef> getAttr(StringRef name) {
-    for (auto& attr : _attrs)
-      if (attr.name() == name)
-        return StringRef{attr.value()};
-
+    for (auto& attr : _attrs) {
+      if (attr.name() == name) {
+        if (auto &val = attr.value()) {
+          return StringRef{*val};
+        } else {
+          return None;
+        }
+      }
+    }
     return None;
   }
 
   void addAttr(HtmlAttr attr) {
     _attrs.push_back(attr);
+  }
+  void addAttr(const Twine& name) {
+    _attrs.push_back(HtmlAttr{name});
   }
   void addAttr(const std::string& name, const std::string& value) {
     _attrs.push_back({name, value});
@@ -304,8 +316,10 @@ struct HtmlTag : Html {
   void addClass(const std::string& css_class) {
     for (auto& attr : _attrs) {
       if (attr.name() == "class") {
-        attr.value() += ' ';
-        attr.value() += css_class;
+        assert(attr.value() && "`class' attribute without value!");
+
+        *attr.value() += ' ';
+        *attr.value() += css_class;
         return;
       }
     }
@@ -413,11 +427,15 @@ struct VerbatimTag : HtmlTag {
     return html->kind() == K_VerbatimTag;
   }
 
-  StringRef body() const { return _body; }
+  StringRef body() const { return _body.str(); }
+
+  void append(const Twine& t) {
+    t.toVector(_body);
+  }
 private:
   void _print(raw_ostream& OS, unsigned indent) const override;
 
-  std::string _body;
+  SmallString<16> _body;
 };
 
 template<typename Visitor>

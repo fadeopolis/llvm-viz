@@ -42,8 +42,13 @@ StringRef html::HtmlEntity::str() const {
 
 template<typename Attrs>
 static void print_attrs(raw_ostream& OS, const Attrs& attrs) {
-  for (const auto& attr : attrs)
-    OS << ' ' << attr.name() << "=\"" << attr.value() << '"';
+  for (const auto& attr : attrs) {
+    if (auto& val = attr.value()) {
+      OS << ' ' << attr.name() << "=\"" << *val << '"';
+    } else {
+      OS << ' ' << attr.name();
+    }
+  }
 }
 
 void SimpleTag::_print(raw_ostream &OS, unsigned indent_lvl) const {
