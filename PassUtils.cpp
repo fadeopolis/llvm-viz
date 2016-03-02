@@ -120,6 +120,6 @@ Html* InstructionNamer::makeString(const Value *v) {
   return html::span(
     /// add type of value as mouseover text
     attr("title", html::print(*v->getType(), false)),
-    getId(v)
+    asOperand(v)
   );
 }
