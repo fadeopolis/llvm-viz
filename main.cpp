@@ -447,7 +447,7 @@ struct ScevRenderer : DummyRenderer {
   }
 };
 
-/// adds loop depth info to basic blocks as html attribute `data-loop-depth'
+/// style basic blocks to show loop depth as colors
 struct LoopDepthStyler final : DummyRenderer {
   static constexpr const unsigned MAX_DEPTH() { return  7; }
 
@@ -468,23 +468,81 @@ struct LoopDepthStyler final : DummyRenderer {
     });
   }
 
-  // TODO: remove, just for demo purposes
-//  void createRenderers(Analyses& analyses, VectorAppender<std::unique_ptr<AttributeRenderer>> dst) override {
-//    createRenderer(
-//      dst,
-//      [&]() {
-//        return new HtmlString("loop-depth");
-//      },
-//      [&](const Instruction& inst) {
-//        auto& loop_info = analyses.loops();
-//
-//        return new HtmlString{std::to_string(loop_info.getLoopDepth(inst.getParent()))};
-//      }
-//    );
-//  }
-
   void addControlCheckboxes(VectorAppender<ControlCheckbox> dst) {
-    dst.emplace_back("Loop depth color", "loop-depth-color", true);
+    dst.emplace_back("Show loop depth", "loop-depth-color", true);
+  }
+
+  Optional<std::string> addCss() override {
+    return std::string{R"(
+      /******************************************/
+      /* color even/odd table rows differently */
+      /* we also encode loop nesting in colors */
+
+      tr.loop-0-odd  { background-color: rgb(255,255,255); }
+      tr.loop-0-even { background-color: rgb(220,220,220); }
+
+      tr.loop-1-odd  { background-color: rgb(255,255,255); }
+      tr.loop-1-even { background-color: rgb(220,220,220); }
+
+      tr.loop-2-odd  { background-color: rgb(255,255,255); }
+      tr.loop-2-even { background-color: rgb(220,220,220); }
+
+      tr.loop-3-odd  { background-color: rgb(255,255,255); }
+      tr.loop-3-even { background-color: rgb(220,220,220); }
+
+      tr.loop-4-odd  { background-color: rgb(255,255,255); }
+      tr.loop-4-even { background-color: rgb(220,220,220); }
+
+      tr.loop-5-odd  { background-color: rgb(255,255,255); }
+      tr.loop-5-even { background-color: rgb(220,220,220); }
+
+      tr.loop-6-odd  { background-color: rgb(255,255,255); }
+      tr.loop-6-even { background-color: rgb(220,220,220); }
+
+      tr.loop-7-odd  { background-color: rgb(255,255,255); }
+      tr.loop-7-even { background-color: rgb(220,220,220); }
+
+      body.loop-depth-color tr.loop-0-odd  { background-color: rgb(255,255,255); }
+      body.loop-depth-color tr.loop-0-even { background-color: rgb(220,220,220); }
+
+      body.loop-depth-color tr.loop-1-odd  { background-color: rgb(254,240,217); }
+      body.loop-depth-color tr.loop-1-even { background-color: rgb(253,212,158); }
+
+      body.loop-depth-color tr.loop-2-odd  { background-color: rgb(254,240,217); }
+      body.loop-depth-color tr.loop-2-even { background-color: rgb(253,212,158); }
+
+      body.loop-depth-color tr.loop-3-odd  { background-color: rgb(253,212,158); }
+      body.loop-depth-color tr.loop-3-even { background-color: rgb(253,187,132); }
+
+      body.loop-depth-color tr.loop-4-odd  { background-color: rgb(252,141,089); }
+      body.loop-depth-color tr.loop-4-even { background-color: rgb(239,101,072); }
+
+      body.loop-depth-color tr.loop-5-odd  { background-color: rgb(215,048,031); }
+      body.loop-depth-color tr.loop-5-even { background-color: rgb(215,048,031); }
+
+      body.loop-depth-color tr.loop-6-odd  { background-color: rgb(215,048,031); }
+      body.loop-depth-color tr.loop-6-even { background-color: rgb(215,048,031); }
+
+      body.loop-depth-color tr.loop-7-odd  { background-color: rgb(215,048,031); }
+      body.loop-depth-color tr.loop-7-even { background-color: rgb(215,048,031); }
+    )"};
+  }
+};
+
+/// Adds checkboxes for hiding the code & arguments & loop-info of functions.
+struct HideCodeStyler final : DummyRenderer {
+  void addControlCheckboxes(VectorAppender<ControlCheckbox> dst) {
+    dst.emplace_back("Display arguments", "display-args",  true);
+    dst.emplace_back("Display code",      "display-code",  true);
+    dst.emplace_back("Display loops",     "display-loops", true);
+  }
+
+  Optional<std::string> addCss() override {
+    return std::string{R"(
+      body:not(.display-args)  .function table.arg-table   { display: none; }
+      body:not(.display-code)  .function table.block-table { display: none; }
+      body:not(.display-loops) .function table.loop-table  { display: none; }
+    )"};
   }
 };
 
@@ -502,8 +560,10 @@ struct HtmlPrinter {
     _renderers.emplace_back(new TypeRenderer{});
     _renderers.emplace_back(new OpcodeRenderer{});
     _renderers.emplace_back(new OperandsRenderer{});
-    _renderers.emplace_back(new LoopDepthStyler{});
     _renderers.emplace_back(new ScevRenderer{});
+
+    _renderers.emplace_back(new LoopDepthStyler{});
+    _renderers.emplace_back(new HideCodeStyler{});
 
     /// Hard coded CSS
 
@@ -528,59 +588,6 @@ struct HtmlPrinter {
 
         th { text-align: center; }
 
-        /******************************************/
-        /* color even/odd table rows differently */
-        /* we also encode loop nesting in colors */
-        /* disable colors with class `loop-depth-color' on <body> */
-
-        tr.loop-0-odd  { background-color: rgb(255,255,255); }
-        tr.loop-0-even { background-color: rgb(220,220,220); }
-
-        tr.loop-1-odd  { background-color: rgb(255,255,255); }
-        tr.loop-1-even { background-color: rgb(220,220,220); }
-
-        tr.loop-2-odd  { background-color: rgb(255,255,255); }
-        tr.loop-2-even { background-color: rgb(220,220,220); }
-
-        tr.loop-3-odd  { background-color: rgb(255,255,255); }
-        tr.loop-3-even { background-color: rgb(220,220,220); }
-
-        tr.loop-4-odd  { background-color: rgb(255,255,255); }
-        tr.loop-4-even { background-color: rgb(220,220,220); }
-
-        tr.loop-5-odd  { background-color: rgb(255,255,255); }
-        tr.loop-5-even { background-color: rgb(220,220,220); }
-
-        tr.loop-6-odd  { background-color: rgb(255,255,255); }
-        tr.loop-6-even { background-color: rgb(220,220,220); }
-
-        tr.loop-7-odd  { background-color: rgb(255,255,255); }
-        tr.loop-7-even { background-color: rgb(220,220,220); }
-
-        body.loop-depth-color tr.loop-0-odd  { background-color: rgb(255,255,255); }
-        body.loop-depth-color tr.loop-0-even { background-color: rgb(220,220,220); }
-
-        body.loop-depth-color tr.loop-1-odd  { background-color: rgb(254,240,217); }
-        body.loop-depth-color tr.loop-1-even { background-color: rgb(253,212,158); }
-
-        body.loop-depth-color tr.loop-2-odd  { background-color: rgb(254,240,217); }
-        body.loop-depth-color tr.loop-2-even { background-color: rgb(253,212,158); }
-
-        body.loop-depth-color tr.loop-3-odd  { background-color: rgb(253,212,158); }
-        body.loop-depth-color tr.loop-3-even { background-color: rgb(253,187,132); }
-
-        body.loop-depth-color tr.loop-4-odd  { background-color: rgb(252,141,089); }
-        body.loop-depth-color tr.loop-4-even { background-color: rgb(239,101,072); }
-
-        body.loop-depth-color tr.loop-5-odd  { background-color: rgb(215,048,031); }
-        body.loop-depth-color tr.loop-5-even { background-color: rgb(215,048,031); }
-
-        body.loop-depth-color tr.loop-6-odd  { background-color: rgb(215,048,031); }
-        body.loop-depth-color tr.loop-6-even { background-color: rgb(215,048,031); }
-
-        body.loop-depth-color tr.loop-7-odd  { background-color: rgb(215,048,031); }
-        body.loop-depth-color tr.loop-7-even { background-color: rgb(215,048,031); }
-
 
         /******************************************/
         /* collapsable code for function */
@@ -603,6 +610,7 @@ struct HtmlPrinter {
         #collapse-all-btn.collapsed .expander  { display: inline; }
         #collapse-all-btn.collapsed .collapser { display: none; }
 
+
         /******************************************/
         /* collapsable overlay for showing CFG */
 
@@ -612,7 +620,7 @@ struct HtmlPrinter {
             height: 0;
             width: 100%;
             position: fixed; /* Stay in place */
-            z-index: 1; /* Sit on top */
+            z-index: 200;    /* Sit on top */
             left: 0;
             top: 0;
             background-color: rgb(0,0,0); /* Black fallback color */
@@ -648,9 +656,8 @@ struct HtmlPrinter {
         /* Position the close button (top right corner) */
         #cfg-overlay-closebtn {
             position: absolute;
-            top:       20px;
-            right:     45px;
-            font-size: 60px !important; /* Override the font-size specified earlier (36px) for all navigation links */
+            top:      2ex;
+            right:    2em;
         }
 
         /*
@@ -678,7 +685,7 @@ struct HtmlPrinter {
             position: fixed;
             top: 0;
             right: 0;
-            z-index: 999;
+            z-index: 100;
             background-color: rgb(220,220,220);
             border-radius: 0 0 0 1em;
             padding: 2em;
@@ -691,6 +698,12 @@ struct HtmlPrinter {
       )"));
       head->add(style(BootstrapCssSource()));
 
+      for (auto& renderer: _renderers) {
+        if (auto code = renderer->addCss()) {
+          head->add(style(*code));
+        }
+      }
+
       head->add(tag("title", analyses.module().getModuleIdentifier()));
 
       doc->add(head);
@@ -698,17 +711,19 @@ struct HtmlPrinter {
 
     auto body = tag("body");
 
-    std::vector<Renderer::ControlCheckbox> controlbar_checkboxes;
-    std::vector<Renderer::ControlButton>   controlbar_buttons;
-
     /// Render control bar which contains buttons & checkboxes for various flags & display actions
     {
-      auto control_bar = table(attr("id", "control-bar"), attr("class", "table"));
+      std::vector<Renderer::ControlCheckbox> checkboxes;
+      std::vector<Renderer::ControlButton>   buttons;
+
+      auto control_bar = table(css_id("control-bar"), css_class("table"));
 
       /// Render fold all functions button
       {
         auto fold_all = a(
-          attr("id", "collapse-all-btn"),
+          css_id("collapse-all-btn"),
+          css_class("btn-link"),
+          attr("href", "javascript:void(0)"),
           span(css_class("collapser"), "Collapse all functions"),
           span(css_class("expander"), "Expand all functions")
         );
@@ -729,17 +744,17 @@ struct HtmlPrinter {
       /// Render checkboxes for various display flags
       {
         for (auto& renderer : _renderers) {
-          renderer->addControlCheckboxes(controlbar_checkboxes);
-          renderer->addControlButtons(controlbar_buttons);
+          renderer->addControlCheckboxes(checkboxes);
+          renderer->addControlButtons(buttons);
         }
 
-        for (auto& button : controlbar_buttons) {
+        for (auto& button : buttons) {
           control_bar->add(
             tr(
               th(
                 attr("colspan", 2),
                 html::a(
-                  attr("id", button.css_id),
+                  css_id(button.css_id),
                   button.display_name
                 )
               )
@@ -749,10 +764,10 @@ struct HtmlPrinter {
 
         control_bar->add(tr());
 
-        for (auto& flag : controlbar_checkboxes) {
+        for (auto& flag : checkboxes) {
           auto checkbox = html::input(
             "checkbox",
-            attr("id", flag.css_id),
+            css_id(flag.css_id),
             attr("data-flag", flag.css_id)
           );
 
@@ -787,10 +802,10 @@ struct HtmlPrinter {
         /// close button for the overlay
         // <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
         html::a(
+          css_id("cfg-overlay-closebtn"),
+          css_class("cfg-overlay-closer btn-large btn-link"),
           attr("href", "javascript:void(0)"),
-          attr("id", "cfg-overlay-closebtn"),
-          attr("class", "cfg-overlay-closer"),
-          html::times()
+          html::times(), "close"
         ),
 
         /// overlay content
@@ -900,6 +915,12 @@ struct HtmlPrinter {
       </svg>
     )XO"));
 
+    for (auto& renderer: _renderers) {
+      if (auto code = renderer->addJs()) {
+        body->add(script(*code));
+      }
+    }
+
     doc->add(body);
 
     doc->print(OS, 0);
@@ -930,7 +951,7 @@ private:
       /// buttons to fold/expand code for function
       header->add(
         html::a(
-          css_class("function-collapse-btn"),
+          css_class("function-collapse-btn btn-link"),
           data_attr("target", '#' + getId(fn)),
           // displayed when fn is expanded
           span(css_class("collapser"), times()),
