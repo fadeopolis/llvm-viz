@@ -18,14 +18,25 @@ using namespace llvm;
 struct InstructionNamer {
   InstructionNamer(ModuleSlotTracker& slots) : _slots{slots} {}
 
-  /// Returns a unique ID for a given value that can be used in CSS.
+  /// Returns a unique ID (at module scope) for a given value that can be used in CSS.
+  /// All symbols except [a-zA-Z0-9_] are escaped, and the final string only contains those chars.
   std::string getId(const Value* v);
   std::string getId(const Value& v) { return getId(&v); }
+
+  void getId(const Value& v, raw_ostream& OS) {
+    getId(&v, OS);
+  }
+  void getId(const Value* v, raw_ostream& OS);
 
   std::string asOperand(const Value& v);
   std::string asOperand(const Value* v) {
     assert(v);
     return asOperand(*v);
+  }
+
+  void asOperand(const Value* v, raw_ostream& OS);
+  void asOperand(const Value& v, raw_ostream& OS) {
+    asOperand(&v, OS);
   }
 
   /// Creates a <a href="#..."> tag or simple string for the given value.

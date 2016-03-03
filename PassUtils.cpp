@@ -15,17 +15,32 @@ using namespace llvm;
 std::string InstructionNamer::getId(const Value *v) {
   assert(v);
 
-  auto it = _ids.find(v);
+  assert(!_ids.count(v) || !_ids[v].empty());
+  auto& id = _ids[v];
 
-  if (it != _ids.end()) {
-    return it->second;
+  if (id.empty()) {
+    raw_string_ostream OS{id};
+    getId(v, OS);
+    OS.flush();
   }
 
+  return id;
+}
+
+void InstructionNamer::getId(const Value *v, raw_ostream &OS) {
+  assert(v);
+  assert(!isa<Constant>(v) || isa<GlobalValue>(v));
+
+  auto isHex = [](char c) -> bool {
+    return ((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')) || ((c >= 'A') && (c <= 'F'));
+  };
+  (void) isHex;
+
   /// print ID to temporary string
-  SmallString<32> tmp;
+  SmallString<32> buf;
   {
-    raw_svector_ostream OS{tmp};
-    if (isa<Constant>(v)) {
+    raw_svector_ostream OS{buf};
+    if (isa<GlobalValue>(v)) {
       v->printAsOperand(OS, false, _slots);
     } else if (auto bb = dyn_cast<BasicBlock>(v)) {
       OS << bb->getParent()->getName();
@@ -44,49 +59,64 @@ std::string InstructionNamer::getId(const Value *v) {
     }
   }
 
-  /// escape special CSS chars
-  std::string str;
-  {
-    raw_string_ostream OS{str};
+  /// escape special chars
+  for (size_t i = 0, e = buf.size(); i < e; i++) {
+    char c = buf[i];
 
-    for (char c : tmp) {
-      switch (c) {
-        case '_':
-          OS << "___";
-          break;
-        case '@':
-          OS << "_at_";
-          break;
-        case '%':
-          OS << "_percent_";
-          break;
-        case '.':
-          OS << "_dot_";
-          break;
-        case '#':
-          OS << "_hash_";
-          break;
-        // TODO: escape more chars
-        default:
-          OS << c;
-          break;
+    /// Escape all special chars in identifier.
+    /// See: http://llvm.org/docs/LangRef.html#identifiers
+    switch (c) {
+      case '_':
+        OS << "___";
+        break;
+      case '@':
+        OS << "_at_";
+        break;
+      case '%':
+        OS << "_percent_";
+        break;
+      case '.':
+        OS << "_dot_";
+        break;
+      case '-':
+        OS << "_dash_";
+        break;
+      case '$':
+        OS << "_dollar_";
+        break;
+      case '"':
+        OS << "_quote_";
+        break;
+        /// llvm escape in identifier '\xx'
+      case '\\': {
+        assert((i + 2) < buf.size() && "Malformed escape sequence in LLVM identifier");
+        char a = buf[i + 1];
+        char b = buf[i + 2];
+        assert(isHex(a));
+        assert(isHex(b));
+
+        OS << "_x" << a << b << '_';
+        i += 2;
+        break;
       }
+      default:
+        assert(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z')));
+        OS << c;
+        break;
     }
-
-    OS.flush();
   }
+}
 
-  /// Cache and return ID
-  auto new_it = _ids.insert(std::make_pair(v, str));
-
-  return new_it.first->second;
+void InstructionNamer::asOperand(const Value *v, raw_ostream& OS) {
+  assert(v);
+  v->printAsOperand(OS, false, _slots);
 }
 
 std::string InstructionNamer::asOperand(const Value &v) {
   std::string str;
   raw_string_ostream OS{str};
 
-  v.printAsOperand(OS, false, _slots);
+  asOperand(v, OS);
   OS.flush();
 
   return str;
@@ -112,7 +142,7 @@ Html* InstructionNamer::makeLink(const Value *v) {
     attr("href",  '#' + getId(v)),
     /// add type of value as mouseover text
     attr("title", html::print(*v->getType(), false)),
-    html::str(asOperand(v))
+    asOperand(v)
   );
 }
 
