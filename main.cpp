@@ -37,6 +37,7 @@
 #include "jQuerySource.hpp"
 #include "BootstrapJsSource.hpp"
 #include "BootstrapCssSource.hpp"
+#include "Style.hpp"
 
 using namespace llvm;
 using namespace html;
@@ -473,59 +474,33 @@ struct LoopDepthStyler final : DummyRenderer {
   }
 
   Optional<std::string> addCss() override {
-    return std::string{R"(
+    std::string str;
+    raw_string_ostream OS{str};
+
+    OS << R"(
       /******************************************/
       /* color even/odd table rows differently */
-      /* we also encode loop nesting in colors */
+      /* we also encode loop nesting in colors */)";
 
-      tr.loop-0-odd  { background-color: rgb(255,255,255); }
-      tr.loop-0-even { background-color: rgb(220,220,220); }
+    for (unsigned i = 0, e = Style::maxLoopDepth(); i <= e; i++) {
+      OS << "      tr.loop-" << i << "-odd  { background-color: " << Style::hardColorForLoopDepth(0).css() << "; }\n";
+      OS << "\n";
+      OS << "      tr.loop-" << i << "-even { background-color: " << Style::softColorForLoopDepth(0).css() << "; }\n";
+    }
 
-      tr.loop-1-odd  { background-color: rgb(255,255,255); }
-      tr.loop-1-even { background-color: rgb(220,220,220); }
+    OS << "\n";
+    OS << "\n";
 
-      tr.loop-2-odd  { background-color: rgb(255,255,255); }
-      tr.loop-2-even { background-color: rgb(220,220,220); }
+    for (unsigned i = 0, e = Style::maxLoopDepth(); i <= e; i++) {
+      OS << "      body.loop-depth-color tr.loop-" << i << "-odd  { background-color: " << Style::hardColorForLoopDepth(i).css() << "; }\n";
+      OS << "\n";
+      OS << "      body.loop-depth-color tr.loop-" << i << "-even { background-color: " << Style::softColorForLoopDepth(i).css() << "; }\n";
+    }
 
-      tr.loop-3-odd  { background-color: rgb(255,255,255); }
-      tr.loop-3-even { background-color: rgb(220,220,220); }
+    OS << "\n";
 
-      tr.loop-4-odd  { background-color: rgb(255,255,255); }
-      tr.loop-4-even { background-color: rgb(220,220,220); }
-
-      tr.loop-5-odd  { background-color: rgb(255,255,255); }
-      tr.loop-5-even { background-color: rgb(220,220,220); }
-
-      tr.loop-6-odd  { background-color: rgb(255,255,255); }
-      tr.loop-6-even { background-color: rgb(220,220,220); }
-
-      tr.loop-7-odd  { background-color: rgb(255,255,255); }
-      tr.loop-7-even { background-color: rgb(220,220,220); }
-
-      body.loop-depth-color tr.loop-0-odd  { background-color: rgb(255,255,255); }
-      body.loop-depth-color tr.loop-0-even { background-color: rgb(220,220,220); }
-
-      body.loop-depth-color tr.loop-1-odd  { background-color: rgb(254,240,217); }
-      body.loop-depth-color tr.loop-1-even { background-color: rgb(253,212,158); }
-
-      body.loop-depth-color tr.loop-2-odd  { background-color: rgb(254,240,217); }
-      body.loop-depth-color tr.loop-2-even { background-color: rgb(253,212,158); }
-
-      body.loop-depth-color tr.loop-3-odd  { background-color: rgb(253,212,158); }
-      body.loop-depth-color tr.loop-3-even { background-color: rgb(253,187,132); }
-
-      body.loop-depth-color tr.loop-4-odd  { background-color: rgb(252,141,089); }
-      body.loop-depth-color tr.loop-4-even { background-color: rgb(239,101,072); }
-
-      body.loop-depth-color tr.loop-5-odd  { background-color: rgb(215,048,031); }
-      body.loop-depth-color tr.loop-5-even { background-color: rgb(215,048,031); }
-
-      body.loop-depth-color tr.loop-6-odd  { background-color: rgb(215,048,031); }
-      body.loop-depth-color tr.loop-6-even { background-color: rgb(215,048,031); }
-
-      body.loop-depth-color tr.loop-7-odd  { background-color: rgb(215,048,031); }
-      body.loop-depth-color tr.loop-7-even { background-color: rgb(215,048,031); }
-    )"};
+    OS.flush();
+    return str;
   }
 };
 

@@ -103,7 +103,12 @@ add_stringified("bootstrap.min.css"   BootstrapCssSource "the Bootstrap 3.3.6 CS
 set_directory_properties(ADDITIONAL_MAKE_CLEAN_FILES ${STRINGIFIED_SOURCES})
 
 ## LLVM-IR to HTML converter
-add_executable(llvm-viz main.cpp HtmlUtils.cpp PassUtils.cpp PrintUtils.cpp
+add_executable(llvm-viz
+    main.cpp
+    HtmlUtils.cpp
+    PassUtils.cpp
+    PrintUtils.cpp
+    Style.cpp
     ${STRINGIFIED_SOURCES})
 
 llvm_map_components_to_libnames(LLVM_LIBS
