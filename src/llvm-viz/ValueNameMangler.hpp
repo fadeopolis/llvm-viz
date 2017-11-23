@@ -6,7 +6,6 @@
 
 #include <llvm/IR/ModuleSlotTracker.h>
 #include <llvm/IR/ValueMap.h>
-#include "Utils.hpp"
 
 namespace html {
 
@@ -15,8 +14,11 @@ struct HtmlTag;
 
 using namespace llvm;
 
-struct InstructionNamer {
-  InstructionNamer(ModuleSlotTracker& slots) : _slots{slots} {}
+/***
+ * Mangles names of LLVM values so they are usable as IDs in CSS.
+ */
+struct ValueNameMangler {
+  ValueNameMangler(ModuleSlotTracker& slots) : _slots{slots} {}
 
   /// Returns a unique ID (at module scope) for a given value that can be used in CSS.
   /// All symbols except [a-zA-Z0-9_] are escaped, and the final string only contains those chars.

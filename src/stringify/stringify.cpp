@@ -2,6 +2,8 @@
 // Created by fader on 01.03.16.
 //
 
+// helper program that turns files into C++ string literals
+
 #include <cstdio>
 #include <string>
 #include <llvm/ADT/SmallString.h>
@@ -10,24 +12,11 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/PrettyStackTrace.h>
+#include <support/PrintUtils.hpp>
 
 using namespace llvm;
 
-struct Stringize {
-  static struct TimeStamp final {
-    constexpr TimeStamp() {}
-
-    friend raw_ostream& operator<<(raw_ostream& OS, TimeStamp) {
-      time_t    now     = time(0);
-      struct tm tstruct = *localtime(&now);
-
-      char buf[128];
-      strftime(buf, sizeof(buf), "%x (%X)", &tstruct);
-
-      return OS << buf;
-    }
-  } timestamp;
-
+struct Stringify {
   struct OutputFile final {
     OutputFile(StringRef suffix, StringRef dst) {
       int fd;
@@ -64,7 +53,7 @@ struct Stringize {
     std::unique_ptr<raw_fd_ostream> _OS;
   };
 
-  static int main(int argc, char** argv) {
+  static int main(int argc, const char* const* argv) {
     cl::opt<std::string> Name("name",
                               cl::Required,
                               cl::desc("Name of function that returns the generated string literal"),
@@ -245,8 +234,8 @@ struct Stringize {
 };
 
 int main(int argc, char** argv) {
-  sys::PrintStackTraceOnErrorSignal();
+  sys::PrintStackTraceOnErrorSignal(argv[0]);
   PrettyStackTraceProgram X{argc, argv};
 
-  return Stringize::main(argc, argv);
+  return Stringify::main(argc, argv);
 }

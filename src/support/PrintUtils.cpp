@@ -5,10 +5,9 @@
 #include "PrintUtils.hpp"
 #include <llvm/ADT/SmallVector.h>
 
-using namespace html;
 using namespace llvm;
 
-void LongStringLiteral::print(raw_ostream &OS, unsigned int indent) {
+void LongStringLiteral::print(raw_ostream &OS, unsigned int indent) const {
   StringRef str = this->str();
 //
 //  // TODO: make the line splitting loop smarter to remove this condition.

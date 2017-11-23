@@ -7,10 +7,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 
-namespace html {
-
-using namespace llvm;
-
 /// Helper class for printing comma separated lists and the like.
 /// It prints something different the first time it is printed (usually just an empty string).
 /// Use like so:
@@ -20,11 +16,11 @@ using namespace llvm;
 ///     outs() << sep << elem;
 /// @endcode
 struct Separator {
-  explicit Separator(StringRef sep = ", ") : Separator{"", sep} { }
+  explicit Separator(llvm::StringRef sep = ", ") : Separator{"", sep} { }
 
-  Separator(StringRef first, StringRef sep) : _first{first}, _sep{sep} { }
+  Separator(llvm::StringRef first, llvm::StringRef sep) : _first{first}, _sep{sep} { }
 
-  StringRef str() {
+  llvm::StringRef str() {
     if (_printed) {
       return _sep;
     } else {
@@ -33,11 +29,11 @@ struct Separator {
     }
   }
 
-  friend raw_ostream &operator<<(raw_ostream &OS, Separator &sep) {
+  friend llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, Separator &sep) {
     return OS << sep.str();
   }
 private:
-  StringRef _first, _sep;
+  const llvm::StringRef _first, _sep;
   bool _printed = false;
 };
 
@@ -45,25 +41,48 @@ private:
 /// When printing it skips the common leading spaces on all lines.
 /// Leading and trailing empty lines are also not printed.
 struct LongStringLiteral {
-  explicit LongStringLiteral(StringRef str) : _str{str} {}
+  explicit constexpr LongStringLiteral(llvm::StringRef str) : _str{str} {}
 
-  StringRef str() const { return _str; }
+  llvm::StringRef str() const { return _str; }
 
   /// Print to stream adding a given indent before each line after having removed the common leading whitespace.
-  void print(raw_ostream& OS, unsigned indent = 0);
+  void print(llvm::raw_ostream& OS, unsigned indent = 0) const;
 
-  friend raw_ostream& operator<<(raw_ostream& OS, LongStringLiteral str) {
+  friend llvm::raw_ostream& operator<<(llvm::raw_ostream& OS, LongStringLiteral str) {
     str.print(OS, 0);
     return OS;
   }
 private:
-  StringRef _str;
+  const llvm::StringRef _str;
 };
 
+/***
+ * Prints current time in human readable format to a stream
+ */
+struct TimeStamp final {
+  constexpr TimeStamp() {}
+
+  friend llvm::raw_ostream& operator<<(llvm::raw_ostream& OS, TimeStamp) {
+    time_t    now     = time(0);
+    struct tm tstruct = *localtime(&now);
+
+    char buf[128];
+    strftime(buf, sizeof(buf), "%x (%X)", &tstruct);
+
+    return OS << buf;
+  }
+};
+
+/// helper for printing current time to stream.
+static TimeStamp timestamp;
+
+/***
+ * Calls member function print() on @p p given arguments @args
+ */
 template<typename P, typename... Args>
 std::string print(const P& p, Args&&... args) {
   std::string buf;
-  raw_string_ostream OS{buf};
+  llvm::raw_string_ostream OS{buf};
 
   p.print(OS, std::forward<Args>(args)...);
   OS.flush();
@@ -71,15 +90,16 @@ std::string print(const P& p, Args&&... args) {
   return buf;
 };
 
+/***
+ * Calls member function printAsOperand() on @p p given arguments @args
+ */
 template<typename P, typename... Args>
 std::string printAsOperand(const P& p, Args&&... args) {
   std::string buf;
-  raw_string_ostream OS{buf};
+  llvm::raw_string_ostream OS{buf};
 
   p.printAsOperand(OS, std::forward<Args>(args)...);
   OS.flush();
 
   return buf;
 };
-
-} // end namespace html

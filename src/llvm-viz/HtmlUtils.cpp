@@ -3,9 +3,9 @@
 //
 
 #include "HtmlUtils.hpp"
-#include "PrintUtils.hpp"
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Type.h>
+#include <support/PrintUtils.hpp>
 
 using namespace llvm;
 using namespace html;

@@ -30,14 +30,18 @@
 #include <memory>                           // for unique_ptr
 #include <string>                           // for string
 #include "HtmlUtils.hpp"
-#include "PassUtils.hpp"
-#include "PrintUtils.hpp"
-#include "Utils.hpp"
-
-#include "jQuerySource.hpp"
-#include "BootstrapJsSource.hpp"
-#include "BootstrapCssSource.hpp"
+#include "ValueNameMangler.hpp"
+#include "CfgToDot.hpp"
 #include "Style.hpp"
+#include <support/VectorAppender.hpp>
+#include <support/safe_ptr.hpp>
+#include <support/VectorAppender.hpp>
+#include <support/PrintUtils.hpp>
+
+/// generated sources
+#include "generated/jQuerySource.hpp"
+#include "generated/BootstrapJsSource.hpp"
+#include "generated/BootstrapCssSource.hpp"
 
 using namespace llvm;
 using namespace html;
@@ -81,7 +85,7 @@ struct Analyses {
     return *_function;
   }
 
-  InstructionNamer& names() {
+  ValueNameMangler& names() {
     return _inst_namer;
   }
 
@@ -95,7 +99,7 @@ struct Analyses {
   /// ***** module global
   Module& _module;
   ModuleSlotTracker _slots;
-  InstructionNamer _inst_namer;
+  ValueNameMangler _inst_namer;
   TargetLibraryInfoImpl _tlii;
   TargetLibraryInfo _tli;
 
@@ -135,7 +139,7 @@ struct Renderer {
 
   /// Adjusts the style of the tbody for a BasicBlock
   struct BasicBlockStyler {
-    /// Called once all instructions has been rendered to allow the styler to adjust CSS classes, etc.
+    /// Called once all instructions have been rendered to allow the styler to adjust CSS classes, etc.
     /// This is not supposed to add new elements, though the API currently does not prevent it.
     virtual void style(const BasicBlock& bb, SimpleTag* tbody) = 0;
   };
@@ -306,25 +310,25 @@ struct OperandsRenderer : DummyRenderer {
 
 struct ScevRenderer : DummyRenderer {
   struct Visitor : SCEVVisitor<Visitor, void> {
-    Visitor(InstructionNamer& namer) : _namer{namer}, _html{div()} {}
+    Visitor(ValueNameMangler& namer) : _namer{namer}, _html{div()} {}
 
     void visitConstant(const SCEVConstant* expr) {
       emit(_namer.ref(expr->getValue()));
     }
     void visitTruncateExpr(const SCEVTruncateExpr* expr) {
-      emit("(trunc " + html::print(*expr->getOperand()->getType()) + " ");
+      emit("(trunc " + print(*expr->getOperand()->getType()) + " ");
       visit(expr->getOperand());
-      emit(" to " + html::print(*expr->getOperand()->getType()) + ")");
+      emit(" to " + print(*expr->getOperand()->getType()) + ")");
     }
     void visitSignExtendExpr(const SCEVSignExtendExpr* expr) {
-      emit("(sext " + html::print(*expr->getOperand()->getType()) + " ");
+      emit("(sext " + print(*expr->getOperand()->getType()) + " ");
       visit(expr->getOperand());
-      emit(" to " + html::print(*expr->getOperand()->getType()) + ")");
+      emit(" to " + print(*expr->getOperand()->getType()) + ")");
     }
     void visitZeroExtendExpr(const SCEVZeroExtendExpr* expr) {
-      emit("(zext " + html::print(*expr->getOperand()->getType()) + " ");
+      emit("(zext " + print(*expr->getOperand()->getType()) + " ");
       visit(expr->getOperand());
-      emit(" to " + html::print(*expr->getOperand()->getType()) + ")");
+      emit(" to " + print(*expr->getOperand()->getType()) + ")");
     }
     void visitAddExpr(const SCEVAddExpr* expr) {
       visitNAry(expr, " + ");
@@ -369,18 +373,18 @@ struct ScevRenderer : DummyRenderer {
     void visitUnknown(const SCEVUnknown* U) {
       Type *AllocTy;
       if (U->isSizeOf(AllocTy)) {
-        emit("sizeof(" + html::print(*AllocTy) + ")");
+        emit("sizeof(" + print(*AllocTy) + ")");
         return;
       }
       if (U->isAlignOf(AllocTy)) {
-        emit("alignof(" + html::print(*AllocTy) + ")");
+        emit("alignof(" + print(*AllocTy) + ")");
         return;
       }
 
       Type *CTy;
       Constant *FieldNo;
       if (U->isOffsetOf(CTy, FieldNo)) {
-        emit("offsetof(" + html::print(*CTy) + ", ", _namer.ref(FieldNo), ")");
+        emit("offsetof(" + print(*CTy) + ", ", _namer.ref(FieldNo), ")");
         return;
       }
 
@@ -418,7 +422,7 @@ struct ScevRenderer : DummyRenderer {
       _html->add(std::forward<T>(t)...);
     }
 
-    InstructionNamer& _namer;
+    ValueNameMangler& _namer;
     SimpleTag*        _html;
   };
 
@@ -443,6 +447,71 @@ struct ScevRenderer : DummyRenderer {
         v.visit(expr);
 
         return v.html()->withStyle(SimpleTag::FlowStyle);
+      }
+    );
+  }
+};
+
+/// render instruction metadata
+struct MetadataRenderer final : DummyRenderer {
+  void createRenderers(Analyses& analyses, VectorAppender<std::unique_ptr<AttributeRenderer>> dst) override {
+    createRenderer(
+      dst,
+      [&]() {
+        return html::str("Metadata");
+      },
+      [&](const Instruction& inst) mutable -> Html* {
+        auto& inst_namer = analyses.names();
+        auto& loops      = analyses.loops();
+        auto& scev       = analyses.scev();
+
+        auto& ctx = inst.getContext();
+
+        SmallVector<std::pair<unsigned, MDNode*>, 4> mds;
+        inst.getAllMetadata(mds);
+
+        SmallVector<StringRef, 8> md_kinds;
+        ctx.getMDKindNames(md_kinds);
+
+        std::function<Html*(Metadata*)> render = [&](Metadata* md) -> Html* {
+          if (!md) {
+            return html::str("null");
+          }
+          if (auto val = dyn_cast<ValueAsMetadata>(md)) {
+            return inst_namer.ref(val->getValue());
+          }
+          if (auto node = dyn_cast<MDNode>(md)) {
+            auto elem = span();
+
+            elem->add("{");
+
+            for (const auto& sub : node->operands()) {
+//              elem->add(print(*sub));
+              elem->add(render(sub));
+            }
+
+            elem->add("}");
+
+            return elem->withStyle(SimpleTag::FlowStyle);
+          }
+
+          auto str = cast<MDString>(md);
+          return html::str(str->getString());
+        };
+
+        bool first = true;
+
+        auto elem = div();
+
+        for (auto md : mds) {
+          if (!first)
+            elem->add(br());
+          first = false;
+
+          elem->add(html::str(md_kinds[md.first] + " -> "), render(md.second));
+        }
+
+        return elem;
       }
     );
   }
@@ -536,6 +605,7 @@ struct HtmlPrinter {
     _renderers.emplace_back(new OpcodeRenderer{});
     _renderers.emplace_back(new OperandsRenderer{});
     _renderers.emplace_back(new ScevRenderer{});
+    _renderers.emplace_back(new MetadataRenderer{});
 
     _renderers.emplace_back(new LoopDepthStyler{});
     _renderers.emplace_back(new HideCodeStyler{});
@@ -954,7 +1024,7 @@ private:
       auto table = html::table(css_class("table arg-table"));
 
       bool first = true;
-      for (auto& arg : fn.getArgumentList()) {
+      for (auto& arg : fn.args()) {
         auto row = html::tr();
 
         auto label = th();
@@ -1072,6 +1142,12 @@ private:
     for (auto& inst : bb)
       body->addChild(emitInstruction(inst));
 
+    body->add(
+      tbody(
+        tr(attr("style", "border-bottom: 1px solid #000;"))
+      )
+    );
+
     return body;
   }
 
@@ -1145,10 +1221,10 @@ private:
 };
 
 int main(int argc, const char * const* argv) {
-  sys::PrintStackTraceOnErrorSignal();
+  sys::PrintStackTraceOnErrorSignal(argv[0]);
   PrettyStackTraceProgram X{argc, argv};
 
-  LLVMContext &Context = getGlobalContext();
+  LLVMContext Context;
 
   cl::ParseCommandLineOptions(argc, argv, "LLVM-IR HTML visualizer\n");
 
@@ -1163,6 +1239,23 @@ int main(int argc, const char * const* argv) {
     return M;
   }();
 
+#if 0
+  ModuleSlotTracker slots{&*M};
+  InstructionNamer namer{slots};
+
+  for (auto& fn : *M) {
+    if (fn.isDeclaration())
+      continue;
+
+    DominatorTree domTree{fn};
+    LoopInfo loops{domTree};
+
+    outs() << "// " << fn.getName() << "\n";
+    outs() << "\n";
+    cfg2dot(outs(), fn, namer, loops);
+    outs() << "\n";
+  }
+#else
   HtmlPrinter printer{*M};
 
   // Open the output file.
@@ -1181,6 +1274,7 @@ int main(int argc, const char * const* argv) {
     printer.run(TOF.os());
     TOF.keep();
   }
+#endif
 
   return 0;
 }

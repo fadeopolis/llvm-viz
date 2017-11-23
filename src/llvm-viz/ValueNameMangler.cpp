@@ -2,17 +2,17 @@
 // Created by fader on 28.02.16.
 //
 
-#include "PassUtils.hpp"
-#include "PrintUtils.hpp"
+#include "ValueNameMangler.hpp"
 #include "HtmlUtils.hpp"
 #include <llvm/PassRegistry.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
+#include <support/PrintUtils.hpp>
 
 using namespace html;
 using namespace llvm;
 
-std::string InstructionNamer::getId(const Value *v) {
+std::string ValueNameMangler::getId(const Value *v) {
   assert(v);
 
   assert(!_ids.count(v) || !_ids[v].empty());
@@ -27,7 +27,7 @@ std::string InstructionNamer::getId(const Value *v) {
   return id;
 }
 
-void InstructionNamer::getId(const Value *v, raw_ostream &OS) {
+void ValueNameMangler::getId(const Value *v, raw_ostream &OS) {
   assert(v);
   assert(!isa<Constant>(v) || isa<GlobalValue>(v));
 
@@ -107,12 +107,12 @@ void InstructionNamer::getId(const Value *v, raw_ostream &OS) {
   }
 }
 
-void InstructionNamer::asOperand(const Value *v, raw_ostream& OS) {
+void ValueNameMangler::asOperand(const Value *v, raw_ostream& OS) {
   assert(v);
   v->printAsOperand(OS, false, _slots);
 }
 
-std::string InstructionNamer::asOperand(const Value &v) {
+std::string ValueNameMangler::asOperand(const Value &v) {
   std::string str;
   raw_string_ostream OS{str};
 
@@ -122,7 +122,7 @@ std::string InstructionNamer::asOperand(const Value &v) {
   return str;
 }
 
-Html* InstructionNamer::ref(const Value* v) {
+Html* ValueNameMangler::ref(const Value* v) {
   if (auto glbl = dyn_cast<GlobalValue>(v)) {
     if (glbl->isDeclaration()) {
       return makeString(v);
@@ -136,20 +136,20 @@ Html* InstructionNamer::ref(const Value* v) {
   }
 }
 
-Html* InstructionNamer::makeLink(const Value *v) {
+Html* ValueNameMangler::makeLink(const Value *v) {
   return tag(
     "a",
     attr("href",  '#' + getId(v)),
     /// add type of value as mouseover text
-    attr("title", html::print(*v->getType(), false)),
+    attr("title", print(*v->getType(), false)),
     asOperand(v)
   );
 }
 
-Html* InstructionNamer::makeString(const Value *v) {
+Html* ValueNameMangler::makeString(const Value *v) {
   return html::span(
     /// add type of value as mouseover text
-    attr("title", html::print(*v->getType(), false)),
+    attr("title", print(*v->getType(), false)),
     asOperand(v)
   );
 }
